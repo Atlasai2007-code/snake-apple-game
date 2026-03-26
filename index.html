@@ -164,6 +164,7 @@
       </div>
       <div class="actions">
         <button class="action pause" id="lockerBtn">Locker</button>
+        <button class="action pause" id="mapsBtn">Maps</button>
       </div>
       <div class="dpad">
         <div class="empty"></div>
@@ -192,6 +193,7 @@
     const standardBtn = document.getElementById('standardBtn');
     const fillBtn = document.getElementById('fillBtn');
     const lockerBtn = document.getElementById('lockerBtn');
+    const mapsBtn = document.getElementById('mapsBtn');
 
     const grid = 14;
     const size = canvas.width / grid;
@@ -215,6 +217,7 @@
     let popEffects = [];
     let confettiPieces = [];
     let gameMode = 'standard';
+    let currentMap = 'classic';
     let autoTurnClockwise = true;
     let showingLocker = false;
     let audioCtx = null;
@@ -226,6 +229,12 @@
       gold: { name: 'Gold', body: '#ffbe3b', stripe: '#fff0b8', glow: 'rgba(255,190,59,0.28)', headA: '#fff8dc', headB: '#ffbe3b' },
       grape: { name: 'Grape', body: '#9b6bff', stripe: '#eadcff', glow: 'rgba(155,107,255,0.28)', headA: '#f5efff', headB: '#9b6bff' },
       lava: { name: 'Lava', body: '#ff6a4d', stripe: '#ffd8cf', glow: 'rgba(255,106,77,0.28)', headA: '#fff0eb', headB: '#ff6a4d' }
+    };
+    const maps = {
+      classic: { name: 'Classic' },
+      tunnel: { name: 'Tunnel' },
+      islands: { name: 'Islands' },
+      arena: { name: 'Arena' }
     };
     let currentSkin = 'dosa';
     let audioReady = false;
@@ -242,11 +251,34 @@
 
     function rand(max) { return Math.floor(Math.random() * max); }
 
+    function getBlockedCells() {
+      const blocked = [];
+      if (currentMap === 'islands') {
+        blocked.push(
+          { x: 4, y: 4 }, { x: 4, y: 5 }, { x: 5, y: 4 }, { x: 5, y: 5 },
+          { x: 8, y: 8 }, { x: 8, y: 9 }, { x: 9, y: 8 }, { x: 9, y: 9 }
+        );
+      }
+      if (currentMap === 'arena') {
+        for (let i = 3; i <= 10; i++) {
+          if (i !== 6 && i !== 7) blocked.push({ x: 6, y: i });
+        }
+      }
+      return blocked;
+    }
+
+    function isBlockedCell(x, y) {
+      return getBlockedCells().some(c => c.x === x && c.y === y);
+    }
+
     function placeApple() {
       if (snake.length >= grid * grid) return;
       do {
         apple = { x: rand(grid), y: rand(grid) };
-      } while (snake.some(s => s.x === apple.x && s.y === apple.y));
+      } while (
+        snake.some(s => s.x === apple.x && s.y === apple.y) ||
+        isBlockedCell(apple.x, apple.y)
+      );
     }
 
     function showOverlay(html) {
@@ -284,6 +316,27 @@
           currentSkin = btn.dataset.skin;
           draw();
           showLocker();
+        });
+      });
+    }
+
+    function showMaps() {
+      showingLocker = true;
+      const buttons = Object.entries(maps).map(([key, map]) => `
+        <button class="skin-btn" data-map="${key}" style="background: rgba(255,255,255,0.08); color: white;">${map.name}</button>
+      `).join('');
+      showOverlay(`
+        <strong>Maps</strong>
+        <div class="meta">Choose the board layout.</div>
+        <div class="locker-grid">${buttons}</div>
+        <div class="mini-badge">Current: ${maps[currentMap].name}</div>
+      `);
+      messageBox.querySelectorAll('[data-map]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentMap = btn.dataset.map;
+          resetGame();
+          draw();
+          showMaps();
         });
       });
     }
@@ -458,12 +511,24 @@
       queuedDirection = inputBuffer[0] || next;
     }
 
+    function normalizeHeadPosition(nx, ny) {
+      if (currentMap === 'tunnel') {
+        if (nx < 0) nx = grid - 1;
+        if (nx >= grid) nx = 0;
+        if (ny < 0) ny = grid - 1;
+        if (ny >= grid) ny = 0;
+      }
+      return { x: nx, y: ny };
+    }
+
     function isSafeMove(dirCandidate) {
-      const nx = snake[0].x + dirCandidate.x;
-      const ny = snake[0].y + dirCandidate.y;
-      const hitWall = nx < 0 || ny < 0 || nx >= grid || ny >= grid;
+      let nx = snake[0].x + dirCandidate.x;
+      let ny = snake[0].y + dirCandidate.y;
+      ({ x: nx, y: ny } = normalizeHeadPosition(nx, ny));
+      const hitWall = (currentMap !== 'tunnel') && (nx < 0 || ny < 0 || nx >= grid || ny >= grid);
       const hitSelf = snake.some(part => part.x === nx && part.y === ny);
-      return !hitWall && !hitSelf;
+      const hitBlock = isBlockedCell(nx, ny);
+      return !hitWall && !hitSelf && !hitBlock;
     }
 
     function chooseSafeDirection() {
@@ -536,8 +601,10 @@
 
       queuedDirection = inputBuffer[0] || direction;
       let head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-      let hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
+      head = normalizeHeadPosition(head.x, head.y);
+      let hitWall = (currentMap !== 'tunnel') && (head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid);
       let hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+      let hitBlock = isBlockedCell(head.x, head.y);
 
       if ((hitWall || hitSelf) && gameMode === 'fill') {
         const safeDirection = chooseAppleChaseDirection() || chooseSafeDirection();
@@ -545,8 +612,10 @@
           direction = safeDirection;
           queuedDirection = inputBuffer[0] || direction;
           head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-          hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
+          head = normalizeHeadPosition(head.x, head.y);
+          hitWall = (currentMap !== 'tunnel') && (head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid);
           hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+          hitBlock = isBlockedCell(head.x, head.y);
         } else {
           running = false;
           score = Math.max(score, snake.length);
@@ -561,7 +630,7 @@
         }
       }
 
-      if (hitWall || hitSelf) return endGame();
+      if (hitWall || hitSelf || hitBlock) return endGame();
 
       snake.unshift(head);
       if (head.x === apple.x && head.y === apple.y) {
@@ -587,9 +656,16 @@
     }
 
     function drawBackground() {
+      const backgrounds = {
+        classic: ['#091226', '#111b33'],
+        tunnel: ['#0a1030', '#13245d'],
+        islands: ['#0d1d1f', '#153936'],
+        arena: ['#1a101e', '#31163e']
+      };
+      const bg = backgrounds[currentMap] || backgrounds.classic;
       const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      g.addColorStop(0, '#091226');
-      g.addColorStop(1, '#111b33');
+      g.addColorStop(0, bg[0]);
+      g.addColorStop(1, bg[1]);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -600,6 +676,14 @@
         ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, canvas.height); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(canvas.width, p); ctx.stroke();
       }
+
+      const blocked = getBlockedCells();
+      blocked.forEach(cell => {
+        const x = cell.x * size;
+        const y = cell.y * size;
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(x + 6, y + 6, size - 12, size - 12);
+      });
     }
 
     function cellCenter(part) {
@@ -775,6 +859,10 @@
     lockerBtn.addEventListener('click', () => {
       if (showingLocker) introMessage();
       else showLocker();
+    });
+    mapsBtn.addEventListener('click', () => {
+      if (showingLocker) introMessage();
+      else showMaps();
     });
     standardBtn.addEventListener('click', () => {
       gameMode = 'standard';
