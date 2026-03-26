@@ -332,6 +332,16 @@
       };
       const next = map[name];
       if (!next) return;
+
+      if (!running) {
+        ensureAudio();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        resetGame();
+        running = true;
+        hideOverlay();
+        playStartSound();
+      }
+
       if (next.x === -direction.x && next.y === -direction.y) return;
       queuedDirection = next;
     }
