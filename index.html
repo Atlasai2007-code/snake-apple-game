@@ -417,7 +417,7 @@
         const hitSelf = snake.some(part => part.x === nx && part.y === ny);
         if (!hitWall && !hitSelf) return d;
       }
-      return direction;
+      return null;
     }
 
     function moveSnake() {
@@ -433,11 +433,27 @@
       let hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
 
       if ((hitWall || hitSelf) && gameMode === 'fill') {
-        direction = chooseSafeDirection();
-        queuedDirection = inputBuffer[0] || direction;
-        head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-        hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
-        hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+        const safeDirection = chooseSafeDirection();
+        if (safeDirection) {
+          direction = safeDirection;
+          queuedDirection = inputBuffer[0] || direction;
+          head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+          hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
+          hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+        } else {
+          // No legal move exists because the board is effectively filled/trapped.
+          // In Fill Mode this should still count as success, never a loss.
+          running = false;
+          score = Math.max(score, snake.length);
+          updateScore();
+          showOverlay(`
+            <strong>Fill Complete</strong>
+            <div class="big-score">${score}</div>
+            <div class="meta">Dosa filled the board and could not lose.</div>
+            <div class="mini-badge">Impossible mode complete.</div>
+          `);
+          return;
+        }
       }
 
       if (hitWall || hitSelf) return endGame();
