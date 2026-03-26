@@ -94,6 +94,22 @@
       display: inline-block; margin-top: 10px; padding: 6px 10px; border-radius: 999px;
       background: rgba(119,168,255,0.12); color: #cfe1ff; border: 1px solid rgba(119,168,255,0.18); font-size: 0.78rem;
     }
+    .locker-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+      text-align: left;
+      pointer-events: auto;
+    }
+    .skin-btn {
+      min-height: 52px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: white;
+      font-weight: 800;
+      padding: 10px 8px;
+    }
     .controls { padding: 0 14px 14px; }
     .actions { display: flex; gap: 10px; margin-bottom: 10px; }
     button { border: 0; cursor: pointer; font: inherit; -webkit-tap-highlight-color: transparent; }
@@ -146,6 +162,9 @@
         <button class="action pause" id="standardBtn">Standard</button>
         <button class="action pause" id="fillBtn">Fill Mode</button>
       </div>
+      <div class="actions">
+        <button class="action pause" id="lockerBtn">Locker</button>
+      </div>
       <div class="dpad">
         <div class="empty"></div>
         <button data-dir="up">▲</button>
@@ -172,6 +191,7 @@
     const pauseBtn = document.getElementById('pauseBtn');
     const standardBtn = document.getElementById('standardBtn');
     const fillBtn = document.getElementById('fillBtn');
+    const lockerBtn = document.getElementById('lockerBtn');
 
     const grid = 14;
     const size = canvas.width / grid;
@@ -196,7 +216,18 @@
     let confettiPieces = [];
     let gameMode = 'standard';
     let autoTurnClockwise = true;
+    let showingLocker = false;
     let audioCtx = null;
+
+    const skins = {
+      dosa: { name: 'Dosa', body: '#ff67b3', stripe: '#ffd1e8', glow: 'rgba(255,103,179,0.28)', headA: '#ffe0f0', headB: '#ff67b3' },
+      mint: { name: 'Mint', body: '#35d47d', stripe: '#b7ffd6', glow: 'rgba(53,212,125,0.28)', headA: '#ddffe8', headB: '#31d078' },
+      ocean: { name: 'Ocean', body: '#4da3ff', stripe: '#d6ebff', glow: 'rgba(77,163,255,0.28)', headA: '#eef7ff', headB: '#4da3ff' },
+      gold: { name: 'Gold', body: '#ffbe3b', stripe: '#fff0b8', glow: 'rgba(255,190,59,0.28)', headA: '#fff8dc', headB: '#ffbe3b' },
+      grape: { name: 'Grape', body: '#9b6bff', stripe: '#eadcff', glow: 'rgba(155,107,255,0.28)', headA: '#f5efff', headB: '#9b6bff' },
+      lava: { name: 'Lava', body: '#ff6a4d', stripe: '#ffd8cf', glow: 'rgba(255,106,77,0.28)', headA: '#fff0eb', headB: '#ff6a4d' }
+    };
+    let currentSkin = 'dosa';
     let audioReady = false;
 
     function loadBest() { return Number(localStorage.getItem(bestKey) || 0); }
@@ -225,6 +256,7 @@
 
     function hideOverlay() {
       overlay.classList.add('hidden');
+      showingLocker = false;
     }
 
     function introMessage() {
@@ -233,6 +265,27 @@
         <div class="meta">${gameMode === 'fill' ? 'No losing. Dosa keeps growing until the board fills up.' : 'Swipe or use the arrows. Eat apples. Don’t crash.'}</div>
         <div class="mini-badge">${gameMode === 'fill' ? 'Unstoppable Dosa.' : 'Dosa is ready.'}</div>
       `);
+      showingLocker = false;
+    }
+
+    function showLocker() {
+      showingLocker = true;
+      const buttons = Object.entries(skins).map(([key, skin]) => `
+        <button class="skin-btn" data-skin="${key}" style="background: linear-gradient(135deg, ${skin.stripe}, ${skin.body}); color: #08111f;">${skin.name}</button>
+      `).join('');
+      showOverlay(`
+        <strong>Dosa Locker</strong>
+        <div class="meta">Pick a skin color for your snake.</div>
+        <div class="locker-grid">${buttons}</div>
+        <div class="mini-badge">Current: ${skins[currentSkin].name}</div>
+      `);
+      messageBox.querySelectorAll('[data-skin]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentSkin = btn.dataset.skin;
+          draw();
+          showLocker();
+        });
+      });
     }
 
     function pauseMessage() {
@@ -558,9 +611,10 @@
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#24c76d';
+      const skin = skins[currentSkin];
+      ctx.strokeStyle = skin.body;
       ctx.lineWidth = size * 0.72;
-      ctx.shadowColor = 'rgba(53,212,125,0.28)';
+      ctx.shadowColor = skin.glow;
       ctx.shadowBlur = 18;
       ctx.beginPath();
       snake.forEach((part, i) => {
@@ -574,7 +628,7 @@
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#b3ffd1';
+      ctx.strokeStyle = skin.stripe;
       ctx.lineWidth = size * 0.34;
       ctx.beginPath();
       snake.forEach((part, i) => {
@@ -591,8 +645,8 @@
       const radius = size * 0.34;
       const shimmer = 1 + Math.sin(pulse * 0.01) * 0.03;
       const headGradient = ctx.createRadialGradient(hx - radius * 0.35, hy - radius * 0.35, radius * 0.15, hx, hy, radius * 1.15);
-      headGradient.addColorStop(0, '#ddffe8');
-      headGradient.addColorStop(1, '#31d078');
+      headGradient.addColorStop(0, skin.headA);
+      headGradient.addColorStop(1, skin.headB);
       ctx.fillStyle = headGradient;
       ctx.beginPath();
       ctx.arc(hx, hy, radius * shimmer, 0, Math.PI * 2);
@@ -718,6 +772,10 @@
 
     startBtn.addEventListener('click', startGame);
     pauseBtn.addEventListener('click', togglePause);
+    lockerBtn.addEventListener('click', () => {
+      if (showingLocker) introMessage();
+      else showLocker();
+    });
     standardBtn.addEventListener('click', () => {
       gameMode = 'standard';
       updateModeButtons();
