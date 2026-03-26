@@ -174,6 +174,7 @@
     let snake = [];
     let direction = { x: 1, y: 0 };
     let queuedDirection = { x: 1, y: 0 };
+    let inputBuffer = [];
     let apple = { x: 10, y: 10 };
     let score = 0;
     let running = false;
@@ -322,6 +323,7 @@
       ];
       direction = { x: 1, y: 0 };
       queuedDirection = { x: 1, y: 0 };
+      inputBuffer = [];
       score = 0;
       stepMs = 140;
       paused = false;
@@ -353,6 +355,14 @@
       gameOverMessage();
     }
 
+    function sameDir(a, b) {
+      return a && b && a.x === b.x && a.y === b.y;
+    }
+
+    function oppositeDir(a, b) {
+      return a && b && a.x === -b.x && a.y === -b.y;
+    }
+
     function setDirection(name) {
       const map = {
         up: { x: 0, y: -1 },
@@ -372,12 +382,23 @@
         playStartSound();
       }
 
-      if (next.x === -direction.x && next.y === -direction.y) return;
-      queuedDirection = next;
+      const lastPlanned = inputBuffer.length ? inputBuffer[inputBuffer.length - 1] : queuedDirection;
+      if (oppositeDir(next, lastPlanned)) return;
+      if (sameDir(next, lastPlanned)) return;
+
+      inputBuffer.push(next);
+      if (inputBuffer.length > 3) inputBuffer = inputBuffer.slice(-3);
+      queuedDirection = inputBuffer[0] || next;
     }
 
     function moveSnake() {
-      direction = queuedDirection;
+      if (inputBuffer.length) {
+        const candidate = inputBuffer.shift();
+        if (!oppositeDir(candidate, direction)) direction = candidate;
+      } else {
+        direction = queuedDirection;
+      }
+      queuedDirection = inputBuffer[0] || direction;
       const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
       const hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
       const hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
