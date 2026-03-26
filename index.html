@@ -690,38 +690,50 @@
       return { x: part.x * size + size / 2, y: part.y * size + size / 2 };
     }
 
+    function drawSnakePath(strokeStyle, lineWidth, withShadow = false) {
+      if (!snake.length) return;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      if (withShadow) {
+        ctx.shadowColor = skins[currentSkin].glow;
+        ctx.shadowBlur = 18;
+      }
+
+      ctx.beginPath();
+      let prev = null;
+      snake.forEach((part, i) => {
+        const c = cellCenter(part);
+        if (i === 0) {
+          ctx.moveTo(c.x, c.y);
+          prev = part;
+          return;
+        }
+
+        const dx = Math.abs(part.x - prev.x);
+        const dy = Math.abs(part.y - prev.y);
+        const wrapped = currentMap === 'tunnel' && (dx > 1 || dy > 1);
+
+        if (wrapped) {
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(c.x, c.y);
+        } else {
+          ctx.lineTo(c.x, c.y);
+        }
+        prev = part;
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function drawSnake() {
       if (!snake.length || (!running && confettiPieces.length)) return;
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
       const skin = skins[currentSkin];
-      ctx.strokeStyle = skin.body;
-      ctx.lineWidth = size * 0.72;
-      ctx.shadowColor = skin.glow;
-      ctx.shadowBlur = 18;
-      ctx.beginPath();
-      snake.forEach((part, i) => {
-        const c = cellCenter(part);
-        if (i === 0) ctx.moveTo(c.x, c.y);
-        else ctx.lineTo(c.x, c.y);
-      });
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = skin.stripe;
-      ctx.lineWidth = size * 0.34;
-      ctx.beginPath();
-      snake.forEach((part, i) => {
-        const c = cellCenter(part);
-        if (i === 0) ctx.moveTo(c.x, c.y);
-        else ctx.lineTo(c.x, c.y);
-      });
-      ctx.stroke();
-      ctx.restore();
+      drawSnakePath(skin.body, size * 0.72, true);
+      drawSnakePath(skin.stripe, size * 0.34, false);
 
       const head = snake[0];
       const hx = head.x * size + size / 2;
