@@ -186,6 +186,7 @@
     let pulse = 0;
     let deathFlash = 0;
     let popEffects = [];
+    let confettiPieces = [];
     let audioCtx = null;
     let audioReady = false;
 
@@ -279,6 +280,33 @@
     function playCrashSound() {
       beep('sawtooth', 220, 0.12, 0.04);
       setTimeout(() => beep('square', 160, 0.18, 0.03), 50);
+      setTimeout(() => beep('triangle', 520, 0.05, 0.02), 40);
+      setTimeout(() => beep('triangle', 760, 0.06, 0.018), 90);
+    }
+
+    function spawnConfettiFromSnake() {
+      const palette = ['#ff67b3', '#ffd1e8', '#ffcf5a', '#7ee7ff', '#9af7bf', '#ffffff'];
+      confettiPieces = [];
+      snake.forEach((part, index) => {
+        const c = cellCenter(part);
+        const count = index === 0 ? 16 : 8;
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 1.5 + Math.random() * 4.5;
+          confettiPieces.push({
+            x: c.x,
+            y: c.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - (1 + Math.random() * 2.2),
+            size: 4 + Math.random() * 8,
+            rot: Math.random() * Math.PI * 2,
+            vr: (Math.random() - 0.5) * 0.28,
+            color: palette[Math.floor(Math.random() * palette.length)],
+            life: 50 + Math.random() * 22,
+            age: 0
+          });
+        }
+      });
     }
 
     function addPopEffect(x, y) {
@@ -301,6 +329,7 @@
       moveAccumulator = 0;
       deathFlash = 0;
       popEffects = [];
+      confettiPieces = [];
       pauseBtn.textContent = 'Pause';
       placeApple();
       updateScore();
@@ -319,6 +348,7 @@
     function endGame() {
       running = false;
       deathFlash = 1;
+      spawnConfettiFromSnake();
       playCrashSound();
       gameOverMessage();
     }
@@ -387,7 +417,7 @@
     }
 
     function drawSnake() {
-      if (!snake.length) return;
+      if (!snake.length || (!running && confettiPieces.length)) return;
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -487,6 +517,25 @@
         ctx.lineWidth = 4 * (1 - t);
         ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
         return true;
+      });
+
+      confettiPieces = confettiPieces.filter(piece => {
+        piece.age += delta / 16;
+        if (piece.age >= piece.life) return false;
+        piece.x += piece.vx;
+        piece.y += piece.vy;
+        piece.vy += 0.12;
+        piece.vx *= 0.995;
+        piece.rot += piece.vr;
+        const alpha = Math.max(0, 1 - piece.age / piece.life);
+        ctx.save();
+        ctx.translate(piece.x, piece.y);
+        ctx.rotate(piece.rot);
+        ctx.fillStyle = piece.color;
+        ctx.globalAlpha = alpha;
+        ctx.fillRect(-piece.size / 2, -piece.size / 3, piece.size, piece.size * 0.66);
+        ctx.restore();
+        return piece.y < canvas.height + 30;
       });
 
       if (deathFlash > 0.01) {
