@@ -142,6 +142,10 @@
         <button class="action start" id="startBtn">Start / Restart</button>
         <button class="action pause" id="pauseBtn">Pause</button>
       </div>
+      <div class="actions">
+        <button class="action pause" id="standardBtn">Standard</button>
+        <button class="action pause" id="fillBtn">Fill Mode</button>
+      </div>
       <div class="dpad">
         <div class="empty"></div>
         <button data-dir="up">▲</button>
@@ -166,6 +170,8 @@
     const messageBox = document.getElementById('messageBox');
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
+    const standardBtn = document.getElementById('standardBtn');
+    const fillBtn = document.getElementById('fillBtn');
 
     const grid = 14;
     const size = canvas.width / grid;
@@ -188,6 +194,8 @@
     let deathFlash = 0;
     let popEffects = [];
     let confettiPieces = [];
+    let gameMode = 'standard';
+    let autoTurnClockwise = true;
     let audioCtx = null;
     let audioReady = false;
 
@@ -204,6 +212,7 @@
     function rand(max) { return Math.floor(Math.random() * max); }
 
     function placeApple() {
+      if (snake.length >= grid * grid) return;
       do {
         apple = { x: rand(grid), y: rand(grid) };
       } while (snake.some(s => s.x === apple.x && s.y === apple.y));
@@ -220,9 +229,9 @@
 
     function introMessage() {
       showOverlay(`
-        <strong>Tap Start</strong>
-        <div class="meta">Swipe or use the arrows. Eat apples. Don’t crash.</div>
-        <div class="mini-badge">Dosa is ready.</div>
+        <strong>${gameMode === 'fill' ? 'Fill Mode' : 'Tap Start'}</strong>
+        <div class="meta">${gameMode === 'fill' ? 'No losing. Dosa keeps growing until the board fills up.' : 'Swipe or use the arrows. Eat apples. Don’t crash.'}</div>
+        <div class="mini-badge">${gameMode === 'fill' ? 'Unstoppable Dosa.' : 'Dosa is ready.'}</div>
       `);
     }
 
@@ -338,6 +347,11 @@
       draw();
     }
 
+    function updateModeButtons() {
+      standardBtn.style.background = gameMode === 'standard' ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
+      fillBtn.style.background = gameMode === 'fill' ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
+    }
+
     function startGame() {
       ensureAudio();
       if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
@@ -391,6 +405,21 @@
       queuedDirection = inputBuffer[0] || next;
     }
 
+    function chooseSafeDirection() {
+      const dirs = autoTurnClockwise
+        ? [{ x: direction.y, y: -direction.x }, { x: direction.x, y: direction.y }, { x: -direction.y, y: direction.x }, { x: -direction.x, y: -direction.y }]
+        : [{ x: -direction.y, y: direction.x }, { x: direction.x, y: direction.y }, { x: direction.y, y: -direction.x }, { x: -direction.x, y: -direction.y }];
+      autoTurnClockwise = !autoTurnClockwise;
+      for (const d of dirs) {
+        const nx = snake[0].x + d.x;
+        const ny = snake[0].y + d.y;
+        const hitWall = nx < 0 || ny < 0 || nx >= grid || ny >= grid;
+        const hitSelf = snake.some(part => part.x === nx && part.y === ny);
+        if (!hitWall && !hitSelf) return d;
+      }
+      return direction;
+    }
+
     function moveSnake() {
       if (inputBuffer.length) {
         const candidate = inputBuffer.shift();
@@ -399,9 +428,18 @@
         direction = queuedDirection;
       }
       queuedDirection = inputBuffer[0] || direction;
-      const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-      const hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
-      const hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+      let head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+      let hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
+      let hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+
+      if ((hitWall || hitSelf) && gameMode === 'fill') {
+        direction = chooseSafeDirection();
+        queuedDirection = inputBuffer[0] || direction;
+        head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+        hitWall = head.x < 0 || head.y < 0 || head.x >= grid || head.y >= grid;
+        hitSelf = snake.some(part => part.x === head.x && part.y === head.y);
+      }
+
       if (hitWall || hitSelf) return endGame();
 
       snake.unshift(head);
@@ -410,6 +448,16 @@
         updateScore();
         addPopEffect(head.x, head.y);
         playEatSound();
+        if (snake.length >= grid * grid) {
+          running = false;
+          showOverlay(`
+            <strong>Board Filled</strong>
+            <div class="big-score">${score}</div>
+            <div class="meta">Dosa filled the whole board.</div>
+            <div class="mini-badge">Perfect run.</div>
+          `);
+          return;
+        }
         placeApple();
         stepMs = Math.max(82, stepMs - 4);
       } else {
@@ -602,6 +650,18 @@
 
     startBtn.addEventListener('click', startGame);
     pauseBtn.addEventListener('click', togglePause);
+    standardBtn.addEventListener('click', () => {
+      gameMode = 'standard';
+      updateModeButtons();
+      resetGame();
+      introMessage();
+    });
+    fillBtn.addEventListener('click', () => {
+      gameMode = 'fill';
+      updateModeButtons();
+      resetGame();
+      introMessage();
+    });
     document.querySelectorAll('[data-dir]').forEach(btn => btn.addEventListener('click', () => setDirection(btn.dataset.dir)));
 
     document.addEventListener('keydown', (e) => {
@@ -625,6 +685,7 @@
     }, { passive: true });
 
     bestEl.textContent = loadBest();
+    updateModeButtons();
     resetGame();
     introMessage();
     requestAnimationFrame(loop);
